@@ -1,0 +1,22 @@
+#!/bin/bash
+
+for x in `route -n | grep ^0 | grep 'UG' | egrep ' wl' | sed -e 's/  */:/g' | egrep -v ':UGH:|:1750:|:2000:'` ;do
+	dest=`echo $x | awk -F : '{print($1)}'`
+	gate=`echo $x | awk -F : '{print($2)}'`
+	mask=`echo $x | awk -F : '{print($3)}'`
+	metric=`echo $x | awk -F : '{print($5)}'`
+	int=`echo $x | awk -F : '{print($8)}'`
+	echo "I see $int is talking to $gate for $dest with a metric of $metric"
+	route del default dev $int
+	route add default gw $gate dev $int metric 2000
+done
+for x in `route -n | grep ^0 | grep 'UG' | egrep ' et| en' | sed -e 's/  */:/g' | egrep -v ':UGH:|:1750:|:2000:'` ;do
+	dest=`echo $x | awk -F : '{print($1)}'`
+	gate=`echo $x | awk -F : '{print($2)}'`
+	mask=`echo $x | awk -F : '{print($3)}'`
+	metric=`echo $x | awk -F : '{print($5)}'`
+	int=`echo $x | awk -F : '{print($8)}'`
+	echo "I see $int is talking to $gate for $dest with a metric of $metric"
+	route del default dev $int
+	route add default gw $gate dev $int metric 1750
+done

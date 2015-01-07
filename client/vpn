@@ -1,0 +1,151 @@
+#!/bin/bash
+
+function fatal {
+	echo -e "`date +%s`:`date`:$@" >> /var/log/vpn.log
+	echo -e "`date +%s`:`date`:$@" | logger -t POS_VPN -p crit
+	sleep 2s
+	exit 1
+}
+
+function warn {
+	echo -e "$@"
+	echo -e "`date +%s`:`date`:$@" | logger -t POS_VPN -p warn
+}
+
+if [ "$UID" != 0 ];then
+	fatal "must be run as root"
+fi
+
+
+for x in route pppd ssh dig ifconfig dig;do
+	if ! which $x 2>> /dev/null >> /dev/null; then
+		fatal "Unable to find $x"
+	fi
+done
+
+if [ -z "$1" ]; then 
+	err="Need configuration name to load, one of : \n$(ls /etc/pos_vpn.d/* | cat | sed -e 's#/etc/pos_vpn.d/#	#g')"
+	fatal "$err"
+fi
+
+source /etc/pos_vpn.conf || fatal Unable to load /etc/pos_vpn.conf
+
+if [ "$1" = "all" ];then
+	cd /etc/pos_vpn.d/
+	for x in *;do 
+		confparse="$confparse"\ "$x";
+	done
+else
+	confparse="$1"
+fi
+droutes=`route -n | egrep '2000|1750' | wc -l`
+if [ "$droutes" -lt 1 ];then
+	warn "Trying to fix route metrics"
+	vpn_fixmetrics
+else
+	echo Routes appear good
+fi
+droutes=`route -n | egrep '2000|1750' | wc -l`
+if [ "$droutes" -lt 1 ];then
+	fatal Unable to sort out routes
+fi
+
+for configs in $confparse;do
+	source /etc/pos_vpn.d/"$configs" || fatal "Unable to source config for $configs"
+	[ -d /var/spool/vpn ] || mkdir -p /var/spool/vpn 
+	echo $locip > /var/spool/vpn/locip.$net
+	echo $remip > /var/spool/vpn/remip.$net
+	#Get the default gateway interface
+	dgi=`route -n | grep ^0.0.0.0  | awk '{print($5 " " $8)}' | egrep '^2000|^1750' | awk '{print($2)}'`
+	#Get the default gateway IP
+	dgip=`route -n | grep ^0.0.0.0  | awk '{print($5 " " $2)}' | egrep '^2000|^1750' | awk '{print($2)}'`
+	#Get our VPN route
+	vgi=`route -n | grep "^$remip" | awk '{print($8)}'`
+	#See local network is the same IP net as the remote net. This is to prevent routing through ppp over ssh when your at the network you are connecting to or being unable to route when your at another net with the same IP allocation.
+	dln=`route -n | grep $dgi | grep ^10.5.0.0`
+	#Local GateWay IP
+	lgwip=`route -n | grep ^0.0.0.0 | awk '{print($2)}'`
+	#PreFetch VPN server names, seems this helps on some shaky Public WiFis. Try to get it from configured servers, the default gateway, localhost, then Level 3's DNS server
+	while [ -z "$rip" ]; do
+		for x in \
+			`cat /etc/resolv.conf | awk -F \# '{print $1}' | awk '{print($2)}'` \
+			`route -n | grep ^0.0.0.0  | awk '{print($2)}' | sort -u` \
+			127.0.0.1 4.2.2.2 
+		do
+			ript=`dig +short +time=2 +tries=1 @"$x" $host`
+			[ -z "$ript" ] || rip="$ript"
+		done
+		[ -z "$ript" ] && warn "Unable to DNS, trying harder, need moar Tiger Blood."
+	done
+	echo Found host IP was "$rip"
+	host="$rip"
+	unset rip
+	unset ript
+	#Are we connected to the world?
+	if [ -z "$dgi" ]; then
+		#no? uh oh!
+		fatal "No default route, aborting."
+	fi
+	#yes? yay!
+	echo Default route through $dgi with IP $dgip
+	#Are we connected?
+	if [ ! -z "$vgi" ]; then
+		fatal "Allready Connected through: $vgi"
+	fi
+	#No? Lets connect!
+	#Make a ppp dev if it dosent exist
+	[ -e /dev/ppp ] || mknod /dev/ppp c 108 0
+	
+	#kill and down a stale connection if it exists
+	if [ -e /var/run/ppp-$name-$net.pid ]; then
+		warn "PID file /var/run/ppp-$name-$net.pid exists, cleaning up."
+		kill `cat /var/run/ppp-$name-$net.pid | head -n 1`
+		/sbin/ifconfig down `cat /var/run/ppp-$name-$net.pid | tail -n 1`
+		sleep 4;
+		[ -e /var/run/ppp-$name-$net.pid ] && rm /var/run/ppp-$name-$net.pid
+	fi
+	#route VPN host through default gateway explicitley
+	eval route add -host $host gw $dgip metric 0;
+	eval route add -host admin.debmi.com gw $dgip metric 0;
+	#Connect!
+	conncmd="/usr/bin/ssh $sshopt -i /root/.ssh/.vpn.key -o StrictHostKeyChecking=no $host -lvpn -p $hostport -o Batchmode=yes /home/vpn/pppcrtl $name"
+	echo $conncmd
+	pppd $pppopts pty "$conncmd" $locip:$remip linkname "$name""$net"
+	#eval $cmd || exit 1
+	cip=`ip addr | grep "$remip" | wc -l`
+	echo Waiting for IPs to come up
+	lc=0
+	while [ "$cip" -lt 1 ] ;do 
+		echo -n .
+		cip=`ip addr | grep "$remip" | wc -l`
+		sleep 0.5s
+		lc=`expr "$lc" + 1`
+		if [ "$lc" -gt 10 ];then
+			fatal "Unable to find IPs"
+		fi
+	done
+	#Make a route! Use metrics so we dont step on important things!
+	vpndev=`vpn_getdev $net`
+	echo VPN Device $vpndev
+	for x in $ripnet;do 
+		ex="route add -net $x gw $remip metric 5 dev $vpndev"
+		echo "$ex"
+		eval "$ex"
+	done
+	for x in $othernet;do 
+		ex="route add -net $x gw $remip metric 50 dev $vpndev"
+		echo "$ex"
+		eval "$ex"
+	done
+	for x in $ripips;do 
+		ex="route add -host $x gw $remip metric 5 dev $vpndev"
+		echo "$ex"
+		eval "$ex"
+	done
+		for x in $otherips;do 
+		ex="route add -host $x gw $remip metric 50 dev $vpndev"
+		echo "$ex"
+		eval "$ex"
+	done
+		echo "`date +%s`:`date`:$name connected to $net" >> /var/log/vpn.log
+done

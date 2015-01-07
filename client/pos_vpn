@@ -1,0 +1,27 @@
+#!/sbin/runscript
+# Copyright 1999-2013 Gentoo Foundation
+# Distributed under the terms of the GNU General Public License v2
+# $Header: $
+
+depend() {
+	use logger dns
+	need net
+}
+
+start() {
+	screen -d -m vpn_watch all
+	true
+}
+
+stop() {
+	for x in /var/run/ppp-`hostname`*;do 
+		ps axfu | grep vpn_gaurd  | grep -v grep | awk '{system("kill -9 " $2)}'
+		PPPPID=`cat $x | head -n 1`
+		while [ -d /proc/$PPPPID ];do
+			kill $PPPPID
+			sleep 15s 
+			kill -9 $PPPPID
+		done
+		
+	done
+}

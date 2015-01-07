@@ -1,0 +1,46 @@
+#!/bin/bash
+echo "`date +%s`: route started run for $1" >> /var/log/vpn.log
+sleep 5s
+ROUTE=`which -a route | grep sbin`
+if [ -z "$ROUTE" ]; then
+        ROUTE=`which route`
+        echo Warning, unable to find route in sbin
+fi
+PPPD=`which -a pppd | grep sbin`
+if [ -z "$PPPD" ]; then
+        PPPD=`which pppd`
+        echo Warning, unable to find pppd in sbin
+fi
+SSH=`which ssh`
+DIG=`which dig`
+IFCONFIG=`which -a ifconfig | grep sbin`
+if [ -z "$IFCONFIG" ]; then
+        IFCONFIG=`which ifconfig`
+fi
+if [ -z "$IFCONFIG" ]; then
+        echo Unable to find ifconfig >> /var/log/vpn.log
+	exit 0
+fi
+if [ -z "$PPPD" ]; then
+        echo Unable to find ppp daemon >> /var/log/vpn.log
+	exit 0
+fi
+if [ -z "$SSH" ]; then
+        echo Unable to find ssh client >> /var/log/vpn.log
+	exit 0
+fi
+if [ -z "$ROUTE" ]; then
+        echo Unable to find route configuration tool >> /var/log/vpn.log
+	exit 0
+fi
+if [ -z "$DIG" ]; then
+        echo Unable to find dig command >> /var/log/vpn.log
+	exit 0
+fi
+
+sleep 5s
+
+sysctl -p 
+for x in /proc/sys/net/ipv4/conf/ppp*/rp_filter;do 
+	echo 0 > "$x"
+done	

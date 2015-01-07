@@ -1,0 +1,9 @@
+pid=`[ -e /var/run/ppp-$1.pid ] && cat /var/run/ppp-$1.pid | head -n 1`
+[ -z "$pid" ] || sudo kill $pid
+if [ ! -z "$pid" ]; then
+	while [ -d "/proc/$pid" ]; do
+        	echo -n . ;
+		kill $pid;
+        	sleep 0.25s;
+	done
+fi	

@@ -1,0 +1,8 @@
+#!/bin/bash
+source /etc/pos_vpn.conf
+case `whereami -r vpnRoute | head -n 1` in
+	unknown)
+	echo `date +%s`:`date`:running route for all on $name >> /var/log/vpn.log
+	vpn_route_all
+	;;
+esac

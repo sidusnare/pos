@@ -1,0 +1,28 @@
+#!/bin/bash
+
+if [ -z "$1" ]; then 
+echo "Need configuration name to load, one of :";
+/bin/ls /etc/pos_vpn.d/* | cat | sed -e 's#/etc/pos_vpn.d/##g';exit 1  ;
+fi
+
+source /etc/pos_vpn.conf
+
+if [ "$1" = "all" ];then
+	cd /etc/pos_vpn.d/
+	for x in *;do 
+	confparse="$confparse"\ "$x";
+	done
+else
+	confparse="$1"
+fi
+echo Configs: "$confparse"
+for configs in $confparse;do
+echo Config: "$configs"
+source /etc/pos_vpn.d/"$configs"
+pc=`ps axfu | grep -v grep | grep "vpn_gaurd $name $net" | wc -l`
+if [ "$pc" -lt 1 ]; then
+	vpn_gaurd "$name" "$net" &
+else
+	echo Skipping, already running
+fi
+done

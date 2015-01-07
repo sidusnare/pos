@@ -1,0 +1,13 @@
+#!/bin/bash
+
+source /etc/pos_vpn.conf
+if [ -f "/etc/pos_vpn.d/$1" ]; then
+	source /etc/pos_vpn.d/"$1"
+#	echo GetDev sourced /etc/pos_vpn.d/"$1" 1>&2
+else
+	echo Unable to source config for $1 1>&2
+	echo GetDev Unable to source config for $1 >> /var/log/vpn.log
+	exit
+fi
+
+tail -n 1 /var/run/ppp-"$name""$net".pid

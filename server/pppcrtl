@@ -1,0 +1,3 @@
+sudo /home/vpn/cleanup $1
+screen -d -m sudo /home/vpn/route $1
+exec sudo /usr/sbin/pppd nodetach notty noauth nomppe lcp-echo-failure 15 lcp-echo-interval 2 nodefaultroute linkname $1

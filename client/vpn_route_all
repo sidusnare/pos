@@ -1,0 +1,30 @@
+#!/bin/bash
+source /etc/pos_vpn.conf
+for x in route ip ifconfig pppd;do
+	if ! which $x >> /dev/null 2>> /dev/null; then
+		echo please install $x
+		exit 1
+	fi
+done
+dgi=`route -n | grep ^0.0.0.0  | awk '{print($5 " " $8)}' | egrep '^2000|^1750' | awk '{print($2)}'`
+
+if [ -n "$dgi" ]; then
+	echo Default Gateway $dgi
+else
+	echo No default gateway
+	exit
+fi
+
+for x in /etc/pos_vpn.d/*; do
+	h=`echo $x | sed -e 's#/etc/pos_vpn.d/##g'`
+	echo $h
+	source /etc/pos_vpn.d/"$h"
+	if [ -e /var/run/ppp-"$name""$h".pid ];then
+		r="route add default gw $remip metric $dgm"
+		echo $r
+		eval $r
+	fi
+done
+redns
+ip addr
+route -n

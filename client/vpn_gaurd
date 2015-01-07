@@ -1,0 +1,12 @@
+#!/usr/bin/perl
+#
+
+while (true){
+	sleep 2;
+	unless (-e "/var/run/ppp-$ARGV[0]$ARGV[1].pid") {
+		print("Starting PPP session for $ARGV[0]$ARGV[1]");
+		system("/usr/local/bin/vpn $ARGV[1] 2>&1 > /var/log/vpn.$ARGV[1].log ");
+		system("/usr/local/bin/vpn_route $ARGV[1] 2>&1 >> /var/log/vpn.$ARGV[1].log");
+		sleep 10;
+		}
+	}

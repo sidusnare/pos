@@ -1,0 +1,13 @@
+#!/bin/bash
+
+if [ -e /etc/init.d/precursor ]; then
+	/etc/init.d/precursor stop
+	/etc/init.d/precursor zap
+	/etc/init.d/precursor start
+fi
+if [ -e /etc/init.d/nscd ]; then
+	/etc/init.d/nscd stop
+	/etc/init.d/nscd zap
+	/etc/init.d/nscd start
+fi
+sleep 2s
